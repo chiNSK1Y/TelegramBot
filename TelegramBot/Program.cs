@@ -203,7 +203,7 @@ namespace TelegramBot
             //Регистрация
             if (update.CallbackQuery.Data == "registration")
             {
-                
+                //Проверяем наличие пользователя
                 bool isRegistered = await directumRX.RegistrationUser(message.From.Id);
 
                 if (isRegistered)
