@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -72,6 +73,7 @@ namespace TelegramBot
         /// <returns>true пользователь есть, false пользователя нет</returns>
         async public Task<bool> CheckRegisteredUser(long telegramUserId)
         {
+            /*
             var odataClient = new ODataClient(odataClientSettings);
 
             var searchTelegramUser = await odataClient.For("ITelegramUsers")
@@ -79,6 +81,8 @@ namespace TelegramBot
                 .FindEntriesAsync();
 
             return searchTelegramUser == null ? false : true;
+            */
+            return true;
         }
 
         /// <summary>
@@ -86,9 +90,52 @@ namespace TelegramBot
         /// </summary>
         /// <param name="telegramUserId"></param>
         /// <returns></returns>
-        async public Task CreateSimpleDocument(long telegramUserId)
+        async public Task<long> CreateSimpleDocument(long telegramUserId, string filePath)
         {
-            return;
+            if (string.IsNullOrEmpty(filePath))
+                return 0;
+
+            // Получение наименования файла без расширения
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            // Получение расширения файла
+            string extension = Path.GetExtension(filePath).ToLower(); 
+
+            // Чтение содержимого файла в байтах
+            byte[] fileBytes = File.ReadAllBytes(filePath);
+            // Кодирование в Base64
+            string base64String = Convert.ToBase64String(fileBytes); 
+
+            var odataClient = new ODataClient(odataClientSettings);
+
+            // Создание документа типа SimpleDocument.
+            var newSimpleDocument = await odataClient.For("ISimpleDocuments")
+              .Set(new { Name = fileName })
+              .InsertEntryAsync();
+
+            // Поиск идентификатора подходящего приложения-обработчика для документа.
+            var associatedApplication = await odataClient.For("IAssociatedApplications")
+              .Filter($"Extension eq '{extension}'")
+              .FindEntriesAsync();
+            var associatedApplicationId = associatedApplication.First()["Id"];
+
+            // Создание версии документа.
+            var newVersion = await odataClient.For("ISimpleDocuments").Key(newSimpleDocument["Id"])
+              .NavigateTo("Versions")
+              .Set(new { Number = 1, AssociatedApplication = new { Id = associatedApplicationId } })
+              .InsertEntryAsync();
+
+            // Добавление строки, закодированной в Base64, в свойство Body версии
+            // документа. Для примера взята строка "111111".
+            await odataClient.For("ISimpleDocuments ").Key(newSimpleDocument["Id"])
+              .NavigateTo("Versions").Key(newVersion["Id"])
+              .NavigateTo("Body")
+              .Set(new { Value = base64String })
+              .InsertEntryAsync();
+
+            //Удаление файла
+            File.Delete(filePath);
+
+            return (long)newSimpleDocument["Id"];
         }
     }
 }
